@@ -1,0 +1,6 @@
+[submodule "a_star"]
+	path = a_star
+	url = git@github.com:anthonyn2121/a_star.git
+[submodule "environment_toolkit"]
+	path = environment_toolkit
+	url = git@github.com:anthonyn2121/environment_toolkit.git
