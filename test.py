@@ -17,15 +17,12 @@ class PolyTraj(object):
             distances[i] =  waypoints[i+1] - waypoints[i]
         self.times = np.cumsum(np.linalg.norm(distances, axis=1))
         self.times = np.append(np.array([[0]]), self.times)  ## Insert 0 at the beginning of self.times
-        self.times /= 3
+        self.times /= 2
         print("times: ", self.times)
 
-        
-        for i in range(len(waypoints) - 2):
-            A, b = self.__set_constraints(self.times[i+1], waypoints[i][0], waypoints[i+1][0])
-            p = np.linalg.solve(A, b)
-
-
+        self.coeffs = self.__solve_polynomials()  ## list of the coeffs for each segment
+        print(len(self.coeffs))
+        print(len(self.coeffs[0]))
         # ## Construct a Gaussian curve that will be the velocity profile of the agent
         # vmax = 5  ## m/s
         # tpeak = (self.times[-1] - 0) / 2  ## velocity should peak at middle of trajectory
@@ -104,10 +101,37 @@ class PolyTraj(object):
         return A, b
     
     def __solve_polynomials(self):
-        for i in range(self.num_segments):
-            T = self.times[i+1]  ## time to reach next waypoint
-            
+        x, y, z = self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]
 
+        coeffs = []
+        for i in range(self.num_segments):
+            p = []
+            for axis in [x, y, z]:
+                T = self.times[i+1]  ## time to reach next waypoint
+                A, b = self.__set_constraints(T, axis[i], axis[i+1])
+                p.append(np.linalg.solve(A, b))
+            coeffs.append(p)
+        return coeffs
+
+    def update(self, t):
+        for i, time in enumerate(self.times):
+            # print("t: ", t, " time waypoint: ", time)
+            if t < time:
+                # print("Finding position")
+                segment = i - 1
+                cx, cy, cz = self.coeffs[segment]
+                x = self.__evaluate_trajectory(t, cx)
+                y = self.__evaluate_trajectory(t, cy)
+                z = self.__evaluate_trajectory(t, cz)
+                return (x, y, z)
+
+
+    def __evaluate_trajectory(self, t, coeffs):
+        return self.__polynomial_basis(t) @ coeffs
+    
 
 if __name__ == "__main__":
-    PolyTraj(5, np.random.randint(0, 10, ((5,3))))
+    traj = PolyTraj(5, np.random.randint(0, 10, ((5,3))))
+    time_span = np.linspace(0, 15, 200)
+    for t in time_span:
+        print("Updated position: ", traj.update(t))
