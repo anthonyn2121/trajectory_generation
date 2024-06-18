@@ -17,41 +17,17 @@ class PolyTraj(object):
             distances[i] =  waypoints[i+1] - waypoints[i]
         self.times = np.cumsum(np.linalg.norm(distances, axis=1))
         self.times = np.append(np.array([[0]]), self.times)  ## Insert 0 at the beginning of self.times
-        self.times /= 2
+        # self.times /= 2
         print("times: ", self.times)
 
+        # A, b = self.__set_constraints(self.times[1], self.waypoints[1][1], self.waypoints[2][1])
+        # print("A: \n", A)
+        # print("b: \n", b)
         self.coeffs = self.__solve_polynomials()  ## list of the coeffs for each segment
-        print(len(self.coeffs))
-        print(len(self.coeffs[0]))
-        # ## Construct a Gaussian curve that will be the velocity profile of the agent
-        # vmax = 5  ## m/s
-        # tpeak = (self.times[-1] - 0) / 2  ## velocity should peak at middle of trajectory
-        # sigma = (self.times[-1] - 0) / 5
-        # self.v = vmax * np.exp(-((self.times - tpeak) ** 2) / (2 * sigma ** 2))
-        # self.v[0] = 0
-        # self.v[-1] = 0
-        # print("velocities: ", self.v)
-
-        # ## Construct array of accelerations
-        # self.a = np.gradient(self.v, self.times)
-        # self.a[0] = 0
-        # self.a[-1] = 0
-        # print("accelerations: ", self.a)
-
-        # coefficients = []
-        # for axis in range(3):
-        #     for i in range(self.num_segments - 1):
-        #         dt = self.times[i+1] - self.times[i]
-        #         start = self.waypoints[i, axis]
-        #         end = self.waypoints[i+1, axis]
-        #         A, b = self.__set_constraints(dt, start, end)
-        #         p = np.linalg.solve(A, b)
-        #         coefficients.append(p)
-        # print(len(p))
 
     def __polynomial_basis(self, t, order=0):
         basis = np.zeros(self.num_coefficients)
-        temp = np.array([t**i for i in range(self.num_coefficients-order-1, 0, -1)])
+        temp = np.array([t**i for i in range(self.num_coefficients-order-1, -1, -1)])
         basis[:len(temp)] = temp
         return basis
     
@@ -86,7 +62,6 @@ class PolyTraj(object):
 
         order = 2
         row = 2
-        # for j in range(2):
         for j in range((self.num_coefficients - 2)//2):
             order = j + 1
             # print("row: ",row, "order: ",order)
@@ -108,30 +83,49 @@ class PolyTraj(object):
             p = []
             for axis in [x, y, z]:
                 T = self.times[i+1]  ## time to reach next waypoint
-                A, b = self.__set_constraints(T, axis[i], axis[i+1])
+                A, b = self.__set_constraints(T - self.times[i], axis[i], axis[i+1])
                 p.append(np.linalg.solve(A, b))
             coeffs.append(p)
         return coeffs
 
     def update(self, t):
         for i, time in enumerate(self.times):
-            # print("t: ", t, " time waypoint: ", time)
             if t < time:
                 # print("Finding position")
-                segment = i - 1
+                segment = i - 1 if i > 0 else 0
                 cx, cy, cz = self.coeffs[segment]
-                x = self.__evaluate_trajectory(t, cx)
-                y = self.__evaluate_trajectory(t, cy)
-                z = self.__evaluate_trajectory(t, cz)
-                return (x, y, z)
-
+                x = self.__evaluate_trajectory(t - self.times[segment], cx)
+                y = self.__evaluate_trajectory(t - self.times[segment], cy)
+                z = self.__evaluate_trajectory(t - self.times[segment], cz)
+                return np.array([x, y, z]).reshape((1,3))
+        return None
 
     def __evaluate_trajectory(self, t, coeffs):
         return self.__polynomial_basis(t) @ coeffs
     
 
 if __name__ == "__main__":
-    traj = PolyTraj(5, np.random.randint(0, 10, ((5,3))))
-    time_span = np.linspace(0, 15, 200)
+    waypoints = np.random.randint(0, 10, (5, 3))
+    traj = PolyTraj(5, waypoints)
+    time_span = np.linspace(0, traj.times[-1], 200)
+    positions = []
     for t in time_span:
-        print("Updated position: ", traj.update(t))
+        pos = traj.update(t)
+        if (np.any(pos) == None):
+            pos = positions[-1]
+        positions.append(pos)
+
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    trajectory = np.asarray(positions).reshape((len(time_span), 3))
+
+    # Plotting the trajectory and waypoints
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], label='Trajectory')
+    ax.scatter(waypoints[:, 0], waypoints[:, 1], waypoints[:, 2], color='red', label='Waypoints')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.legend()
+    plt.show(block=True)
