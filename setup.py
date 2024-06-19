@@ -8,3 +8,6 @@ submodule_path = os.path.join(os.path.dirname(__file__), 'environment_toolkit')
 sys.path.append(submodule_path)
 
 submodule_path = os.path.join(os.path.dirname(__file__), 'a_star')
+
+# Add the submodule's path to the Python path
+sys.path.append(submodule_path)
