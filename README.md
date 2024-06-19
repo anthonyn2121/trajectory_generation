@@ -2,6 +2,12 @@
 
 Given a 3D occupancy map of an environment, efficiently compute feasible, minimum-snap trajectories that follow the shortest collision-free path from start to goal. The shortest, collision free path through the environment is found through the A* graph search algorithm. That path is pruned to a minimal set of waypoints and a sequence of polynomials is joined together to form a smooth trajectory.
 
+## Usage
+```
+git clone git@github.com:anthonyn2121/trajectory_generation.git
+git submodule update --init --recursive
+python3 main.py -e environment_toolkit/worlds/forest.json
+```
 
 ## TODO:
 - [ ] Create a FuncAnimation that smoothly transitions ax view_angle to view the paths easier rather than saving static image
