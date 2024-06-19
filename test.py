@@ -1,8 +1,9 @@
 import numpy as np
 
 class PolyTraj(object):
-    def __init__(self, n, waypoints):
-        self.n = n  ## order of polynomial
+    def __init__(self, r, waypoints):
+        self.r = r  ## 
+        self.n = 2*r - 1  ## order of polynomial
         self.waypoints = np.asarray(waypoints)
         print("waypoints: \n", waypoints)
         self.num_waypoints = waypoints.shape[0]
@@ -21,14 +22,30 @@ class PolyTraj(object):
         print("times: ", self.times)
 
         ## Find velocity by finding distance/time
-        self.v = np.zeros(self.waypoints.shape)
-        for i in range(self.waypoints.shape[0] - 1):
-            v = (self.waypoints[i+1] - self.waypoints[i]) / self.times[i+1] 
-            self.v[i+1] = v
+        # self.v = np.zeros(self.waypoints.shape)
+        # for i in range(self.waypoints.shape[0] - 1):
+        #     v = (self.waypoints[i+1] - self.waypoints[i]) / self.times[i+1] 
+        #     self.v[i+1] = v
+        self.d = {}  ## derivatives of the position
+        for r in range(1, self.r):
+            dr_array = np.zeros(self.waypoints.shape)
+            for i in range(self.waypoints.shape[0] - 1):
+                if (r == 1):
+                    drdt = (self.waypoints[i+1] - self.waypoints[i]) / self.times[i+1]
+                    dr_array[i+1] = drdt
+                else:
+                    drdt = (self.d[r-1][i + 1] - self.d[r-1][i]) / self.times[i+1]
+                    dr_array[i+1] = drdt
+            self.d[r] = dr_array
 
-        self.v[-1] = np.zeros(3)
-        print("velocities: ", self.v)
-        print(self.v[3,2])
+        for k in self.d.keys():
+            self.d[k][-1] = np.zeros(3)  ## set end derivatives to 0
+
+        print(self.d)
+
+        # self.v[-1] = np.zeros(3)
+        # print("velocities: ", self.v)
+        # print(self.v[3,2])
 
         # A, b = self.__set_constraints(self.times[1], self.waypoints[1][1], self.waypoints[2][1])
         # print("A: \n", A)
@@ -62,14 +79,18 @@ class PolyTraj(object):
             return np.append(coefficients[::-1], np.zeros(self.num_coefficients - len(coefficients)))
 
     def __set_constraints(self, T, start, end):
-        x_t, vx_t = start
-        x_T, vx_T = end
+        # x_t, vx_t = start
+        # x_T, vx_T = end
+        start = np.array(start)
+        end = np.array(end)
         A = np.zeros((self.num_coefficients, self.num_coefficients))
         b = np.zeros((self.num_coefficients, 1))
+        b[::2] = start.reshape((-1, 1))
+        b[1::2] = end.reshape((-1, 1))
 
         ## position constraints
         A[:2, :] = np.vander([0, T], N = self.n + 1)
-        b[:4] = np.array([x_t, x_T, vx_t, vx_T]).reshape((4,1))
+        # b[:4] = np.array([x_t, x_T, vx_t, vx_T]).reshape((4,1))
 
         order = 2
         row = 2
@@ -85,14 +106,17 @@ class PolyTraj(object):
         return A, b
     
     def __solve_polynomials(self):
-        # x, y, z = self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]
-        # vx, vy, vz = self.v[:, 0], self.v[:, 1], self.v[:, 2]
         coeffs = []
         for i in range(self.num_segments):
             p = []
             for j in range(3):
                 T = self.times[i+1]  ## time to reach next waypoint
-                A, b = self.__set_constraints(T - self.times[i], [self.waypoints[i, j], self.v[i, j]], [self.waypoints[i+1,j], self.v[i+1, j]])
+                start = [self.waypoints[i, j]]
+                end = [self.waypoints[i+1, j]]
+                for k in self.d.keys():
+                    start.append(self.d[k][i, j])
+                    end.append(self.d[k][i + 1, j])
+                A, b = self.__set_constraints(T - self.times[i], start, end)
                 p.append(np.linalg.solve(A, b))
             coeffs.append(p)
         return coeffs
@@ -100,7 +124,6 @@ class PolyTraj(object):
     def update(self, t):
         for i, time in enumerate(self.times):
             if t < time:
-                # print("Finding position")
                 segment = i - 1 if i > 0 else 0
                 cx, cy, cz = self.coeffs[segment]
                 x = self.__evaluate_trajectory(t - self.times[segment], cx)
@@ -115,7 +138,7 @@ class PolyTraj(object):
 
 if __name__ == "__main__":
     waypoints = np.random.randint(0, 10, (5, 3))
-    traj = PolyTraj(7, waypoints)
+    traj = PolyTraj(4, waypoints)
     time_span = np.linspace(0, traj.times[-1], 200)
     positions = []
     for t in time_span:
