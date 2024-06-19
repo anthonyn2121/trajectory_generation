@@ -2,14 +2,23 @@ import numpy as np
 
 class PolyTraj(object):
     def __init__(self, r, waypoints):
-        self.r = r  ## 
+        '''
+        Creates a piecewise polynomial spline to generate trajectories of an entity
+
+                               | P1(t), t0 <= t <= t1
+                        P(t) = | P2(t), t1 <= t <= t2
+                               | P3(t), t2 <= t <= t3
+                               
+        Args:
+            r (int): The order of the derivative to minimize
+            waypoints (list, np.array): The waypoints the entity should pass through            
+        '''
+        self.r = r  ## order to minimize
         self.n = 2*r - 1  ## order of polynomial
         self.waypoints = np.asarray(waypoints)
-        print("waypoints: \n", waypoints)
         self.num_waypoints = waypoints.shape[0]
         self.num_segments = self.num_waypoints - 1
-        self.num_coefficients = self.n  + 1
-
+        self.num_coefficients = self.n + 1
 
         ## Construct an array of time values where the values correspond to
         ## the time it should take the agent to reach that waypoint
@@ -18,14 +27,9 @@ class PolyTraj(object):
             distances[i] =  waypoints[i+1] - waypoints[i]
         self.times = np.cumsum(np.linalg.norm(distances, axis=1))
         self.times = np.append(np.array([[0]]), self.times)  ## Insert 0 at the beginning of self.times
-        # self.times /= 2
-        print("times: ", self.times)
+        self.times /= 2
 
-        ## Find velocity by finding distance/time
-        # self.v = np.zeros(self.waypoints.shape)
-        # for i in range(self.waypoints.shape[0] - 1):
-        #     v = (self.waypoints[i+1] - self.waypoints[i]) / self.times[i+1] 
-        #     self.v[i+1] = v
+        ## Find the 3D rth-derivative of position
         self.d = {}  ## derivatives of the position
         for r in range(1, self.r):
             dr_array = np.zeros(self.waypoints.shape)
@@ -41,46 +45,79 @@ class PolyTraj(object):
         for k in self.d.keys():
             self.d[k][-1] = np.zeros(3)  ## set end derivatives to 0
 
-        print(self.d)
-
-        # self.v[-1] = np.zeros(3)
-        # print("velocities: ", self.v)
-        # print(self.v[3,2])
-
-        # A, b = self.__set_constraints(self.times[1], self.waypoints[1][1], self.waypoints[2][1])
-        # print("A: \n", A)
-        # print("b: \n", b)
         self.coeffs = self.__solve_polynomials()  ## list of the coeffs for each segment
 
+    def update(self, t):
+        """
+        Finds the position returned from the appropriate polynomial function created
+
+        Args:
+            t (float): Current time to find the position
+
+        Return:
+            np.array or None: Position at time 't' or No update
+        """
+        for i, time in enumerate(self.times):
+            if t < time:
+                segment = i - 1 if i > 0 else 0
+                cx, cy, cz = self.coeffs[segment]
+                x = self.__evaluate_trajectory(t - self.times[segment], cx)
+                y = self.__evaluate_trajectory(t - self.times[segment], cy)
+                z = self.__evaluate_trajectory(t - self.times[segment], cz)
+                return np.array([x, y, z]).reshape((1,3))
+        return None
+
     def __polynomial_basis(self, t, order=0):
+        """
+        Returns the polynomial function at time t or its derivative of a specified order.
+
+        Args:
+            t (float): The time value to substitute 't' in the function
+            order (int, optional): The r-th derivative of the polynomial function
+
+        Returns:
+            list: A list of values after substituting in 't', before summation
+        """
         basis = np.zeros(self.num_coefficients)
         temp = np.array([t**i for i in range(self.num_coefficients-order-1, -1, -1)])
         basis[:len(temp)] = temp
         return basis
     
-    def __basis_coefficients(self, order):
-            """
-            Returns the coefficients of a polynomial function or its derivative of a specified order.
-            
-            Args:
-                coefficients (list): A list of coefficients representing the polynomial function.
-                order (int, optional): The order of the derivative to compute. Default is 0 (original polynomial).
-            
-            Returns:
-                list: A list of coefficients for the polynomial function or its derivative of the specified order.
-            """            
-            coefficients = np.ones(self.n + 1)
-            for _ in range(order):
-                # Compute the derivative coefficients
-                degree = len(coefficients) - 1
-                derivative_coeffs = [coefficients[i] * i for i in range(1, degree + 1)]
-                coefficients = derivative_coeffs
-            
-            return np.append(coefficients[::-1], np.zeros(self.num_coefficients - len(coefficients)))
+    def __basis_coefficients(self, order=0):
+        """
+        Returns the coefficients of a polynomial function or its derivative of a specified order.
+        
+        Args:
+            coefficients (list): A list of coefficients representing the polynomial function.
+            order (int, optional): The order of the derivative to compute. Default is 0 (original polynomial).
+        
+        Returns:
+            list: A list of coefficients for the polynomial function or its derivative of the specified order.
+        """            
+        coefficients = np.ones(self.n + 1)
+        for _ in range(order):
+            # Compute the derivative coefficients
+            degree = len(coefficients) - 1
+            derivative_coeffs = [coefficients[i] * i for i in range(1, degree + 1)]
+            coefficients = derivative_coeffs
+        
+        return np.append(coefficients[::-1], np.zeros(self.num_coefficients - len(coefficients)))
 
     def __set_constraints(self, T, start, end):
-        # x_t, vx_t = start
-        # x_T, vx_T = end
+        """
+        Creates the A and b matrices that represents the start and end constraints of the polynomial function
+        that contains up to a total of 2r constraints and has continuous constraints up to (r - 1)th-derivative order
+        Note: This is done in 1D
+
+        Args:
+            T (float): The time it takes to travel from start to end
+            start (list): The initial state at waypoint[i]
+            end (list): The terminal state at waypoint[i+1]
+
+        Return:
+            A (np.array): Matrix of values to multiply against the vector of coefficients
+            b (np.array): Vector of intial and terminal state values as constraints
+        """
         start = np.array(start)
         end = np.array(end)
         A = np.zeros((self.num_coefficients, self.num_coefficients))
@@ -90,8 +127,8 @@ class PolyTraj(object):
 
         ## position constraints
         A[:2, :] = np.vander([0, T], N = self.n + 1)
-        # b[:4] = np.array([x_t, x_T, vx_t, vx_T]).reshape((4,1))
 
+        ## higher order derivative constraints
         order = 2
         row = 2
         for j in range((self.num_coefficients - 2)//2):
@@ -100,12 +137,13 @@ class PolyTraj(object):
             A[row+1, :] = self.__basis_coefficients(order) * self.__polynomial_basis(T, order)
             row += 2
 
-        # print("A: \n", A)
-        # print("b: \n", b)
-
         return A, b
     
     def __solve_polynomials(self):
+        """
+        Finds the coefficients of each polynomial function found for every segment of the trajectory by 
+        solving the Ap = b equation and finding A,b matrices from __set_constraints            
+        """
         coeffs = []
         for i in range(self.num_segments):
             p = []
@@ -121,18 +159,17 @@ class PolyTraj(object):
             coeffs.append(p)
         return coeffs
 
-    def update(self, t):
-        for i, time in enumerate(self.times):
-            if t < time:
-                segment = i - 1 if i > 0 else 0
-                cx, cy, cz = self.coeffs[segment]
-                x = self.__evaluate_trajectory(t - self.times[segment], cx)
-                y = self.__evaluate_trajectory(t - self.times[segment], cy)
-                z = self.__evaluate_trajectory(t - self.times[segment], cz)
-                return np.array([x, y, z]).reshape((1,3))
-        return None
-
     def __evaluate_trajectory(self, t, coeffs):
+        """
+        Solves the polynomial in matrix form
+
+        Args:
+            t (float): The time to solve for
+            coeffs (np.array): Coefficients for the polynomial
+
+        Returns:
+            float: The dot product between both vectors
+        """
         return self.__polynomial_basis(t) @ coeffs
     
 
