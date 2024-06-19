@@ -1,5 +1,27 @@
 import numpy as np
 
+def filter_points(waypoints):
+    waypoints = np.asarray(waypoints)
+    # Initialize list of necessary waypoints
+    necessary_waypoints = [waypoints[0]]
+
+    # Check each triplet of waypoints for collinearity
+    for i in range(1, waypoints.shape[0] - 1):
+        prev_wp = necessary_waypoints[-1]
+        curr_wp = waypoints[i]
+        next_wp = waypoints[i + 1]
+
+        # Calculate vectors
+        vec1 = curr_wp - prev_wp
+        vec2 = next_wp - curr_wp
+
+        # Check if the vectors are collinear
+        if not np.allclose(np.cross(vec1, vec2), 0):
+            necessary_waypoints.append(curr_wp)
+
+    necessary_waypoints.append(waypoints[-1])
+    return np.array(necessary_waypoints)
+
 class PolyTraj(object):
     def __init__(self, r, waypoints):
         '''
@@ -15,16 +37,16 @@ class PolyTraj(object):
         '''
         self.r = r  ## order to minimize
         self.n = 2*r - 1  ## order of polynomial
-        self.waypoints = np.asarray(waypoints)
-        self.num_waypoints = waypoints.shape[0]
+        self.waypoints = filter_points(waypoints)
+        self.num_waypoints = self.waypoints.shape[0]
         self.num_segments = self.num_waypoints - 1
         self.num_coefficients = self.n + 1
 
         ## Construct an array of time values where the values correspond to
         ## the time it should take the agent to reach that waypoint
-        distances = np.zeros((waypoints.shape[0] - 1,3))
+        distances = np.zeros((self.waypoints.shape[0] - 1,3))
         for i in range(distances.shape[0]):
-            distances[i] =  waypoints[i+1] - waypoints[i]
+            distances[i] =  self.waypoints[i+1] - self.waypoints[i]
         self.times = np.cumsum(np.linalg.norm(distances, axis=1))
         self.times = np.append(np.array([[0]]), self.times)  ## Insert 0 at the beginning of self.times
         self.times /= 2
