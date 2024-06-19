@@ -4,7 +4,7 @@ import json
 import matplotlib.pyplot as plt
 from environment_toolkit.environment import Environment
 from environment_toolkit.occupancy_map import OccupancyMap
-from a_star.a_star import graph_search
+from a_star import graph_search
 from trajectory_generator import PolyTraj
 
 
