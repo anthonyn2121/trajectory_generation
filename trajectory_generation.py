@@ -4,7 +4,6 @@ class PolyTraj(object):
     def __init__(self, n, waypoints):
         self.n = n  ## order of polynomial
         self.waypoints = waypoints
-        print("waypoints: \n", waypoints)
         self.num_waypoints = waypoints.shape[0]
         self.num_segments = self.num_waypoints - 1
         self.num_coefficients = self.n  + 1
@@ -17,12 +16,7 @@ class PolyTraj(object):
             distances[i] =  waypoints[i+1] - waypoints[i]
         self.times = np.cumsum(np.linalg.norm(distances, axis=1))
         self.times = np.append(np.array([[0]]), self.times)  ## Insert 0 at the beginning of self.times
-        # self.times /= 2
-        print("times: ", self.times)
 
-        # A, b = self.__set_constraints(self.times[1], self.waypoints[1][1], self.waypoints[2][1])
-        # print("A: \n", A)
-        # print("b: \n", b)
         self.coeffs = self.__solve_polynomials()  ## list of the coeffs for each segment
 
     def __polynomial_basis(self, t, order=0):
@@ -60,18 +54,14 @@ class PolyTraj(object):
         A[:2, :] = np.vander([0, T], N = self.n + 1)
         b[:2] = np.array([start, end]).reshape((2,1))
 
+        ## higher derivative constraints
         order = 2
         row = 2
         for j in range((self.num_coefficients - 2)//2):
             order = j + 1
-            # print("row: ",row, "order: ",order)
             A[row, -order-1] = np.polyder(np.poly1d([1]*self.num_coefficients), order)(0)
-            # print("basis_coeffs: ", self.__basis_coefficients(order), " basis: ", [i for i in range(self.num_coefficients-order-1, -1, -1)])
             A[row+1, :] = self.__basis_coefficients(order) * self.__polynomial_basis(T, order)
             row += 2
-
-        # print("A: \n", A)
-        # print("b: \n", b)
 
         return A, b
     
@@ -91,7 +81,6 @@ class PolyTraj(object):
     def update(self, t):
         for i, time in enumerate(self.times):
             if t < time:
-                # print("Finding position")
                 segment = i - 1 if i > 0 else 0
                 cx, cy, cz = self.coeffs[segment]
                 x = self.__evaluate_trajectory(t - self.times[segment], cx)
