@@ -3,7 +3,7 @@ import numpy as np
 class PolyTraj(object):
     def __init__(self, n, waypoints):
         self.n = n  ## order of polynomial
-        self.waypoints = waypoints
+        self.waypoints = np.asarray(waypoints)
         print("waypoints: \n", waypoints)
         self.num_waypoints = waypoints.shape[0]
         self.num_segments = self.num_waypoints - 1
@@ -19,6 +19,22 @@ class PolyTraj(object):
         self.times = np.append(np.array([[0]]), self.times)  ## Insert 0 at the beginning of self.times
         # self.times /= 2
         print("times: ", self.times)
+
+        ## Construct a Gaussian curve that will be the velocity profile of the agent
+        # vmax = 5  ## m/s
+        # tpeak = (self.times[-1] - 0) / 2  ## velocity should peak at middle of trajectory
+        # sigma = (self.times[-1] - 0) / 5
+        # self.v = vmax * np.exp(-((self.times - tpeak) ** 2) / (2 * sigma ** 2))
+        # self.v[0] = 0
+        # self.v[-1] = 0
+        self.v = np.zeros(self.waypoints.shape)
+        for i in range(self.waypoints.shape[0] - 1):
+            v = (self.waypoints[i+1] - self.waypoints[i]) / self.times[i+1] 
+            self.v[i+1] = v
+
+        self.v[-1] = np.zeros(3)
+        print("velocities: ", self.v)
+        print(self.v[3,2])
 
         # A, b = self.__set_constraints(self.times[1], self.waypoints[1][1], self.waypoints[2][1])
         # print("A: \n", A)
@@ -52,13 +68,14 @@ class PolyTraj(object):
             return np.append(coefficients[::-1], np.zeros(self.num_coefficients - len(coefficients)))
 
     def __set_constraints(self, T, start, end):
+        x_t, vx_t = start
+        x_T, vx_T = end
         A = np.zeros((self.num_coefficients, self.num_coefficients))
         b = np.zeros((self.num_coefficients, 1))
 
         ## position constraints
-        V = np.vander([0, T], N = self.n + 1)
         A[:2, :] = np.vander([0, T], N = self.n + 1)
-        b[:2] = np.array([start, end]).reshape((2,1))
+        b[:4] = np.array([x_t, x_T, vx_t, vx_T]).reshape((4,1))
 
         order = 2
         row = 2
@@ -76,14 +93,14 @@ class PolyTraj(object):
         return A, b
     
     def __solve_polynomials(self):
-        x, y, z = self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]
-
+        # x, y, z = self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]
+        # vx, vy, vz = self.v[:, 0], self.v[:, 1], self.v[:, 2]
         coeffs = []
         for i in range(self.num_segments):
             p = []
-            for axis in [x, y, z]:
+            for j in range(3):
                 T = self.times[i+1]  ## time to reach next waypoint
-                A, b = self.__set_constraints(T - self.times[i], axis[i], axis[i+1])
+                A, b = self.__set_constraints(T - self.times[i], [self.waypoints[i, j], self.v[i, j]], [self.waypoints[i+1,j], self.v[i+1, j]])
                 p.append(np.linalg.solve(A, b))
             coeffs.append(p)
         return coeffs
@@ -106,7 +123,7 @@ class PolyTraj(object):
 
 if __name__ == "__main__":
     waypoints = np.random.randint(0, 10, (5, 3))
-    traj = PolyTraj(5, waypoints)
+    traj = PolyTraj(7, waypoints)
     time_span = np.linspace(0, traj.times[-1], 200)
     positions = []
     for t in time_span:
@@ -128,4 +145,5 @@ if __name__ == "__main__":
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
     ax.legend()
+    plt.savefig("mytrajectory.png")
     plt.show(block=True)
