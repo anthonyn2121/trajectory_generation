@@ -79,14 +79,20 @@ class PolyTraj(object):
         Return:
             np.array or None: Position at time 't' or No update
         """
+        self.flat_output = {'x': np.zeros(3),          ## position
+                            'x_dot': np.zeros(3),      ## velocity
+                            'x_ddot': np.zeros(3),     ## acceleration
+                            'x_dddot': np.zeros(3),    ## jerk
+                            'x_ddddot': np.zeros(3)}   ## snap
+
         for i, time in enumerate(self.times):
             if t < time:
                 segment = i - 1 if i > 0 else 0
                 cx, cy, cz = self.coeffs[segment]
-                x = self.__evaluate_trajectory(t - self.times[segment], cx)
-                y = self.__evaluate_trajectory(t - self.times[segment], cy)
-                z = self.__evaluate_trajectory(t - self.times[segment], cz)
-                return np.array([x, y, z]).reshape((1,3))
+                self.__get_flat_output(t - self.times[segment], cx, 0)
+                self.__get_flat_output(t - self.times[segment], cy, 1)
+                self.__get_flat_output(t - self.times[segment], cz, 2)
+                return self.flat_output
         return None
 
     def __polynomial_basis(self, t, order=0):
@@ -194,16 +200,27 @@ class PolyTraj(object):
         """
         return self.__polynomial_basis(t) @ coeffs
     
+    def __get_flat_output(self, t, coeffs, axis):
+        for i in range(len(self.d) + 1):
+            key = list(self.flat_output.keys())[i]
+            self.flat_output[key][axis] = (self.__basis_coefficients(order=i) * self.__polynomial_basis(t, order=i)) @ coeffs
+
+
+        return self.flat_output
+
 
 if __name__ == "__main__":
     waypoints = np.random.randint(0, 10, (5, 3))
+    print("waypoints: \n", waypoints)
     traj = PolyTraj(4, waypoints)
     time_span = np.linspace(0, traj.times[-1], 200)
     positions = []
     for t in time_span:
-        pos = traj.update(t)
-        if (np.any(pos) == None):
+        flat_output = traj.update(t)
+        if (flat_output == None):
             pos = positions[-1]
+        else:
+            pos = flat_output['x']
         positions.append(pos)
 
     import matplotlib.pyplot as plt

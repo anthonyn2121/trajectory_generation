@@ -55,9 +55,11 @@ if __name__ == "__main__":
     time_span = np.linspace(0, max_simulation_time, 200)
     trajectory = []
     for t in time_span:
-        pos = traj.update(t)
-        if (np.any(pos) == None):
+        flat_output = traj.update(t)
+        if (flat_output == None):
             pos = trajectory[-1]
+        else:
+            pos = flat_output['x']
         trajectory.append(pos)
 
     ax = env.get_plot()
