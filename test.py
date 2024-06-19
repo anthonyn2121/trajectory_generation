@@ -20,13 +20,7 @@ class PolyTraj(object):
         # self.times /= 2
         print("times: ", self.times)
 
-        ## Construct a Gaussian curve that will be the velocity profile of the agent
-        # vmax = 5  ## m/s
-        # tpeak = (self.times[-1] - 0) / 2  ## velocity should peak at middle of trajectory
-        # sigma = (self.times[-1] - 0) / 5
-        # self.v = vmax * np.exp(-((self.times - tpeak) ** 2) / (2 * sigma ** 2))
-        # self.v[0] = 0
-        # self.v[-1] = 0
+        ## Find velocity by finding distance/time
         self.v = np.zeros(self.waypoints.shape)
         for i in range(self.waypoints.shape[0] - 1):
             v = (self.waypoints[i+1] - self.waypoints[i]) / self.times[i+1] 
@@ -81,9 +75,7 @@ class PolyTraj(object):
         row = 2
         for j in range((self.num_coefficients - 2)//2):
             order = j + 1
-            # print("row: ",row, "order: ",order)
             A[row, -order-1] = np.polyder(np.poly1d([1]*self.num_coefficients), order)(0)
-            # print("basis_coeffs: ", self.__basis_coefficients(order), " basis: ", [i for i in range(self.num_coefficients-order-1, -1, -1)])
             A[row+1, :] = self.__basis_coefficients(order) * self.__polynomial_basis(T, order)
             row += 2
 
